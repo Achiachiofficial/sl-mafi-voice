@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="si">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SL-MAFI</title>
+
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#000">
+
+<style>
+body{
+  margin:0;
+  background:#000;
+  color:#fff;
+  font-family:system-ui;
+  height:100vh;
+  overflow:hidden;
+}
+
+/* HEADER */
+header{
+  position:fixed;
+  top:0;
+  width:100%;
+  height:56px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 15px;
+  border-bottom:1px solid #111;
+  z-index:10;
+}
+
+/* SIDEBAR */
+.sidebar{
+  position:fixed;
+  top:0;
+  left:-260px;
+  width:260px;
+  height:100%;
+  background:#0b0b0b;
+  padding:15px;
+  transition:0.3s;
+  z-index:20;
+}
+.sidebar.open{ left:0; }
+
+.sidebar h3{
+  margin-top:60px;
+  font-size:14px;
+  opacity:0.7;
+}
+
+.chat-item{
+  background:#111;
+  padding:10px;
+  border-radius:8px;
+  margin-top:8px;
+  font-size:13px;
+  cursor:pointer;
+}
+
+/* MAIN */
+.main{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  margin-top:120px;
+}
+
+.call-circle{
+  width:140px;
+  height:140px;
+  border-radius:50%;
+  border:3px solid #4caf50;
+  animation:pulse 1.5s infinite;
+  display:none;
+}
+.calling .call-circle{ display:block }
+
+@keyframes pulse{
+  0%{transform:scale(1);opacity:1}
+  100%{transform:scale(1.4);opacity:0}
+}
+
+.chat{
+  margin-top:20px;
+  font-size:14px;
+  opacity:0.85;
+  text-align:center;
+  padding:0 20px;
+}
+
+/* BOTTOM */
+.bottom{
+  position:fixed;
+  bottom:20px;
+  width:100%;
+  display:flex;
+  justify-content:space-around;
+}
+.bottom button{
+  background:#111;
+  color:#fff;
+  border:none;
+  padding:12px;
+  border-radius:50%;
+  font-size:20px;
+}
+.mic{
+  background:#4caf50;
+  width:60px;
+  height:60px;
+  font-size:26px;
+}
+</style>
+</head>
+
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar" id="sidebar">
+  <h3>Chats</h3>
+  <div id="chatList"></div>
+</div>
+
+<header>
+  <button onclick="toggleSidebar()">☰</button>
+  <h1>SL-MAFI</h1>
+  <div style="width:32px;height:32px;border-radius:50%;background:#222"></div>
+</header>
+
+<div class="main">
+  <div class="call-circle"></div>
+  <div class="chat" id="chat">
+    Hi achi 👋<br>Where should we start?
+  </div>
+</div>
+
+<div class="bottom">
+  <button onclick="newChat()">➕</button>
+  <button onclick="toggleVoice()">🎧</button>
+  <button class="mic" onclick="startCall()">🎤</button>
+</div>
+
+<script>
+/* ---------- STATE ---------- */
+let active=false;
+let voiceType="female";
+let chats = JSON.parse(localStorage.getItem("mafiChats") || "[]");
+
+/* ---------- SIDEBAR ---------- */
+function toggleSidebar(){
+  document.getElementById("sidebar").classList.toggle("open");
+  renderChats();
+}
+
+function renderChats(){
+  const list=document.getElementById("chatList");
+  list.innerHTML="";
+  chats.forEach((c,i)=>{
+    const d=document.createElement("div");
+    d.className="chat-item";
+    d.innerText=c.q;
+    d.onclick=()=>{
+      document.getElementById("chat").innerText=
+        "You: "+c.q+"\n\nSL-MAFI: "+c.a;
+      toggleSidebar();
+    };
+    list.appendChild(d);
+  });
+}
+
+/* ---------- CHAT ---------- */
+function saveChat(q,a){
+  chats.push({q,a});
+  localStorage.setItem("mafiChats",JSON.stringify(chats));
+}
+
+function newChat(){
+  document.getElementById("chat").innerText="New chat started";
+}
+
+/* ---------- VOICE ---------- */
+function toggleVoice(){
+  voiceType = voiceType==="female" ? "male" : "female";
+  alert("Voice: "+voiceType);
+}
+
+const rec=new (window.SpeechRecognition||webkitSpeechRecognition)();
+rec.lang="si-LK";
+rec.continuous=false;
+
+function startCall(){
+  active=true;
+  document.body.classList.add("calling");
+  rec.start();
+}
+
+rec.onresult=async e=>{
+  const user=e.results[0][0].transcript;
+  document.getElementById("chat").innerText="You: "+user;
+
+  const r=await fetch("/api/chat",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({text:user})
+  });
+
+  const d=await r.json();
+  document.getElementById("chat").innerText="SL-MAFI: "+d.reply;
+  saveChat(user,d.reply);
+  speak(d.reply);
+};
+
+function speak(text){
+  const u=new SpeechSynthesisUtterance(text);
+  u.lang="si-LK";
+  const v=speechSynthesis.getVoices();
+  u.voice=v.find(x=>
+    voiceType==="female"
+      ? x.name.toLowerCase().includes("female")
+      : x.name.toLowerCase().includes("male")
+  )||v[0];
+  u.onend=()=>{ if(active) rec.start(); };
+  speechSynthesis.speak(u);
+}
+</script>
+
+</body>
+</html>
